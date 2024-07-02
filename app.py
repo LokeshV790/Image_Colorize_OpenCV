@@ -2,6 +2,13 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+import random
+import os
+import matplotlib.pyplot as plt
+
+# Set the directory paths for normal and pneumonia training images
+TRAIN_NORMAL = "chest_xray/train/NORMAL"
+TRAIN_PNEUMONIA = "chest_xray/train/PNEUMONIA"
 
 # Load your trained model
 model_path = 'pneumoniaDetectLV17.h5'
@@ -21,6 +28,47 @@ def preprocess_image(image):
     img = np.expand_dims(img, axis=0)  # Add batch dimension
     return img
 
+# Function to display a random normal and pneumonia image
+def display_comparison_images(user_image_path):
+    # Open user uploaded image
+    user_image = Image.open(user_image_path)
+    
+    # Choose a random image from the normal and pneumonia directories
+    random_normal_image = random.choice(os.listdir(TRAIN_NORMAL))
+    random_pneumonia_image = random.choice(os.listdir(TRAIN_PNEUMONIA))
+
+    # Open the selected images
+    normal_image = Image.open(os.path.join(TRAIN_NORMAL, random_normal_image))
+    pneumonia_image = Image.open(os.path.join(TRAIN_PNEUMONIA, random_pneumonia_image))
+
+    # Create a figure for displaying the images
+    figure = plt.figure(figsize=(20, 10))
+
+    # Display the user uploaded image in the first subplot
+    subplot1 = figure.add_subplot(1, 3, 1)
+    plt.imshow(user_image)
+    subplot1.set_title("Uploaded Image")
+
+    # Display the normal image in the second subplot
+    subplot2 = figure.add_subplot(1, 3, 2)
+    plt.imshow(normal_image)
+    subplot2.set_title("Normal")
+
+    # Display the pneumonia image in the third subplot
+    subplot3 = figure.add_subplot(1, 3, 3)
+    plt.imshow(pneumonia_image)
+    subplot3.set_title("Pneumonia")
+
+    # Show the figure
+    st.pyplot(figure)
+
+# Function to predict pneumonia based on user-uploaded image
+def predict_pneumonia(image):
+    processed_image = preprocess_image(image)
+    prediction = model.predict(processed_image)
+    pneumonia_probability = prediction[0][0]
+    return pneumonia_probability
+
 # Streamlit app
 def main():
     st.title('Pneumonia Detection App')
@@ -30,21 +78,29 @@ def main():
     uploaded_file = st.file_uploader("Choose a chest X-ray image ...", type=['jpg', 'jpeg', 'png'])
 
     if uploaded_file is not None:
+        # Temporarily save the uploaded image
+        user_image_path = './user_uploaded_image.png'
+        with open(user_image_path, 'wb') as f:
+            f.write(uploaded_file.read())
+
         # Display the uploaded image
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Uploaded Image', use_column_width=True)
+        user_image = Image.open(user_image_path)
+        st.image(user_image, caption='Uploaded Image', use_column_width=True)
 
-        # Preprocess the image
-        processed_image = preprocess_image(uploaded_file)
+        # Display normal and pneumonia images for comparison
+        display_comparison_images(user_image_path)
 
-        # Predict the class (0: Normal, 1: Pneumonia)
-        prediction = model.predict(processed_image)
-        pneumonia_probability = prediction[0][0]
+        # Predict pneumonia based on the uploaded image
+        pneumonia_probability = predict_pneumonia(user_image_path)
 
+        # Determine and display prediction result
         if pneumonia_probability > 0.5:
-            st.write(f'Prediction: Pneumonia (Probability: {pneumonia_probability:.2f})')
+            st.error('High probability of Pneumonia. Please consult a doctor for further evaluation.')
         else:
-            st.write(f'Prediction: Normal (Probability: {1 - pneumonia_probability:.2f})')
+            st.success('Low probability of Pneumonia. Consider regular check-ups.')
+
+        # Remove the temporarily saved uploaded image
+        os.remove(user_image_path)
 
 # Run the app
 if __name__ == '__main__':
