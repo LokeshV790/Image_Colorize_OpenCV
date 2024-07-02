@@ -1,4 +1,5 @@
+streamlit
 tensorflow
-keras
-scipy
-glob2
+matplotlib
+numpy
+Pillow
