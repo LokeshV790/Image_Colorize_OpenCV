@@ -5,6 +5,9 @@ import tensorflow as tf
 import random
 import os
 import matplotlib.pyplot as plt
+from skimage import io
+from skimage.color import rgb2gray
+from skimage.filters import threshold_otsu
 
 # Set the directory paths for normal and pneumonia training images
 TRAIN_NORMAL = "chest_xray/train/NORMAL"
@@ -27,6 +30,32 @@ def preprocess_image(image):
     img = img / 255.0  # Normalize pixel values
     img = np.expand_dims(img, axis=0)  # Add batch dimension
     return img
+
+# Function to check if an image is a chest X-ray
+def is_chest_xray(image_path):
+    try:
+        img = Image.open(image_path)
+        img = img.resize((256, 256))  # Resize image for consistency
+        
+        # Convert to RGB if not already in RGB
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        img_array = np.asarray(img)
+        
+        # Check if image is grayscale
+        if len(img_array.shape) < 3:
+            return False
+        
+        # Check if image is mostly black and white
+        grayscale_img = rgb2gray(img_array)
+        thresh = threshold_otsu(grayscale_img)
+        binary_img = grayscale_img > thresh
+        return np.mean(binary_img) > 0.5  # Adjust threshold based on your images
+    
+    except Exception as e:
+        print(f"Error processing image: {str(e)}")
+        return False
 
 # Function to display a random normal and pneumonia image
 def display_comparison_images(user_image_path):
@@ -66,8 +95,7 @@ def display_comparison_images(user_image_path):
 def predict_pneumonia(image):
     processed_image = preprocess_image(image)
     prediction = model.predict(processed_image)
-    pneumonia_probability = prediction[0][0]
-    return pneumonia_probability
+    return prediction
 
 # Streamlit app
 def main():
@@ -83,6 +111,11 @@ def main():
         with open(user_image_path, 'wb') as f:
             f.write(uploaded_file.read())
 
+        # Check if uploaded image is a chest X-ray
+        if not is_chest_xray(user_image_path):
+            st.error('Please upload a valid chest X-ray image only.')
+            return
+
         # Display the uploaded image
         user_image = Image.open(user_image_path)
         st.image(user_image, caption='Uploaded Image', use_column_width=True)
@@ -91,9 +124,10 @@ def main():
         display_comparison_images(user_image_path)
 
         # Predict pneumonia based on the uploaded image
-        pneumonia_probability = predict_pneumonia(user_image_path)
-
+        prediction = predict_pneumonia(user_image_path)
+        
         # Determine and display prediction result
+        pneumonia_probability = prediction[0][0]
         if pneumonia_probability > 0.5:
             st.error('High probability of Pneumonia. Please consult a doctor for further evaluation.')
         else:
